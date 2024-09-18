@@ -16,7 +16,7 @@
 ## 有3个点有待解决
 + 1.将列表转移到cuda上
 + 2.修改将输出列表转化为函数的函数，将其depth拓展到>3
-    def parse_expression(exp):
+`def parse_expression(exp):
     x = symbols('x')
     if isinstance(exp, list):
         if len(exp) == 0:  # 防止空列表的错误
@@ -43,20 +43,18 @@
         if isinstance(exp, str) and exp == 'x':  # 处理变量 x
             return x
         return exp  # 处理常数
-
-# 化简表达式并返回最简形式
+`
+`
 def to_simplified_string(prefix_expr):
     """将前缀表达式化简为最简多项式形式。"""
     sympy_expr = parse_expression(prefix_expr)  # 解析表达式
     if sympy_expr is None:
-        return "Invalid expression"
-    
+        return "Invalid expression"    
     simplified_expr = simplify(sympy_expr)  # 化简
     return sp.expand(simplified_expr)  # 返回最简形式
-      
+`
 + 3.检查随时会出现的None值返回
   `
-# 轮盘赌选择
 def select(population,fitnesses): # population为许多个树，fitnesses为每个树的适应度
     inverse_fitnesses = [1/(f+1e-10) for f in fitnesses] # 防止除0错误
     total_fitness = sum(inverse_fitnesses)
