@@ -44,7 +44,7 @@
             return x
         return exp  # 处理常数
 `
-`
+``
 def to_simplified_string(prefix_expr):
     """将前缀表达式化简为最简多项式形式。"""
     sympy_expr = parse_expression(prefix_expr)  # 解析表达式
@@ -52,7 +52,7 @@ def to_simplified_string(prefix_expr):
         return "Invalid expression"    
     simplified_expr = simplify(sympy_expr)  # 化简
     return sp.expand(simplified_expr)  # 返回最简形式
-`
+``
 + 3.检查随时会出现的None值返回
   `
 def select(population,fitnesses): # population为许多个树，fitnesses为每个树的适应度
