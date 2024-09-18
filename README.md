@@ -16,7 +16,8 @@
 ## 有3个点有待解决
 + 1.将列表转移到cuda上
 + 2.修改将输出列表转化为函数的函数，将其depth拓展到>3
-`def parse_expression(exp):
+## 
+    def parse_expression(exp):
     x = symbols('x')
     if isinstance(exp, list):
         if len(exp) == 0:  # 防止空列表的错误
