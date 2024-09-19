@@ -18,8 +18,8 @@ plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 cross_rate = 0.7 # 交叉率
 mutate_rate = 0.3 # 变异率
 data_num = 200 # 真实数据的数量
-num_generations = 500 # 迭代代数
-population_size = 100 # 单个种群数量
+num_generations = 300 # 迭代代数
+population_size = 50 # 单个种群数量
 max_depth = 3 # 最大深度
 #=====================================#
 
@@ -148,28 +148,55 @@ def to_simplified_string(prefix_expr):
     simplified_expr = simplify(sympy_expr)  # 化简
     return sp.expand(simplified_expr)  # 返回最简形式
 
+#定义虹吸函数
+def siphon(list1, list2, func):
+    # 对两个列表的元素根据函数值进行排序
+    sorted_list1 = sorted(list1, key=func)
+    sorted_list2 = sorted(list2, key=func)
+    
+    # 计算每个列表的前50%的元素数量
+    half_size1 = len(sorted_list1) // 2
+    half_size2 = len(sorted_list2) // 2
+    
+    # 获取每个列表根据函数值排序后的前50%的元素
+    top_50_percent_list1 = sorted_list1[:half_size1]
+    top_50_percent_list2 = sorted_list2[:half_size2]
+    
+    # 将这些元素合并到一个新的列表中
+    result_list = top_50_percent_list1 + top_50_percent_list2
+    
+    return result_list
 # population_size:随机生成的种群数量 data:
 def symbolic_regression(num_generations, population_size, data):
     # 初始化两个敌对种群
     best = []
     best_a = []
     best_b = []
+    best_usa = []
     best_num = 1000
     best_num_a = 1000
     best_num_b = 1000
+    best_num_usa = 1000
     population_a = [generation_random_expression() for _ in range(population_size)]
     population_b = [generation_random_expression() for _ in range(population_size)]
+    population_usa = siphon(population_a,population_b,lambda x: fitness_function(x,data))
+    
     #初始化两种群的变异率
     mutate_rate_a = mutate_rate
     mutate_rate_b = mutate_rate
+    mutate_rate_usa = 0.5
+    time = 1
     for generation in range(num_generations):
+        time += 1
         # 种群全部评价适应度
         fitnesses_a = [fitness_function(ind,data) for ind in population_a]
         fitnesses_b = [fitness_function(ind,data) for ind in population_b]
+        fitnesses_usa = [fitness_function(ind,data) for ind in population_usa]
         # 给出最佳适应度 
         best_fitness_a = min(fitnesses_a)
         best_fitness_b = min(fitnesses_b)
-        best_fitness = min(best_fitness_b,best_fitness_a)
+        best_fitness_usa = min(fitnesses_usa)
+        best_fitness = min(best_fitness_b,best_fitness_a,best_fitness_usa)
         if best_fitness < best_num:
             best_num = best_fitness
         best.append(best_num)
@@ -179,22 +206,27 @@ def symbolic_regression(num_generations, population_size, data):
         if best_fitness_b < best_num_b:
             best_num_b = best_fitness_b
         best_b.append(best_num_b)
+        if best_fitness_usa < best_num_usa:
+            best_num_usa = best_fitness_usa
+        best_usa.append(best_num_usa)
         # 最佳的树
         best_expr_a = population_a[fitnesses_a.index(best_fitness_a)]
         best_expr_b = population_b[fitnesses_b.index(best_fitness_b)]
+        best_expr_usa = population_usa[fitnesses_usa.index(best_fitness_usa)]
         #定义一个函数，判断哪一个胜出
         def f(a,b):
             return 'a' if a < b else 'b'
         # 输出循环次数和当前最大适应度
         print('-'*10)
-        print(f'Generation:{generation} \nBest fitness_a = {best_fitness_a} Best fitness_b = {best_fitness_b}') 
-        print(f'fitness a = {sum(fitnesses_a)} fitness b = {sum(fitnesses_b)}\
+        print(f'Generation:{generation} \nBest fitness_a = {best_fitness_a} Best fitness_b = {best_fitness_b} Best fitness_usa = {best_fitness_usa}') 
+        print(f'fitness a = {sum(fitnesses_a)} fitness b = {sum(fitnesses_b)} fitness usa = {sum(fitnesses_usa)}\
             {f(sum(fitnesses_a),sum(fitnesses_b))} win!') 
-        print(f'mutate_rate_a:{mutate_rate_a} mutate_rate_b:{mutate_rate_b}')
+        print(f'mutate_rate_a:{mutate_rate_a} mutate_rate_b:{mutate_rate_b} mutate_rate_usa:{mutate_rate_usa}')
         print('-'*10)
         # 选择新的种群
         new_population_a = []
         new_population_b = []
+        new_population_usa = []
         # a种群
         while len(new_population_a) < population_size:
             if f(sum(fitnesses_a),sum(fitnesses_b))=='b':
@@ -231,14 +263,32 @@ def symbolic_regression(num_generations, population_size, data):
             new_population_b.append(child1)
             new_population_b.append(child2)
         population_b = new_population_b[:]
+        while len(new_population_usa) < population_size:
+            parent_usa_1 = select(population_usa,fitnesses_usa)
+            parent_usa_2 = select(population_usa,fitnesses_usa)
+            # 交叉
+            child1,child2 = crossover(parent_usa_1,parent_usa_2)
+            # 变异
+            child1 = mutation(child1,mutate_rate=mutate_rate_usa)
+            child2 = mutation(child2,mutate_rate=mutate_rate_usa)
+                
+            new_population_usa.append(child1)
+            new_population_usa.append(child2)
+        population_usa = new_population_usa[:]
+        if best_fitness_usa > min(best_fitness_a,best_fitness_b):
+            population_usa = siphon(population_a,population_b,lambda x: fitness_function(x,data))
     plt.title(f"最终适应度{best[-1]}")
     plt.plot(best_a,label='a')
     plt.plot(best_b,label='b')
+    plt.plot(best_usa,label='usa')
+    plt.legend()
     plt.show()
-    if min(min(fitnesses_b),min(fitnesses_a)) == min(fitnesses_a):
+    if min(min(fitnesses_b),min(fitnesses_a),min(fitnesses_usa)) == min(fitnesses_a):
         return best_expr_a
-    else:
+    elif min(min(fitnesses_b),min(fitnesses_a),min(fitnesses_usa)) == min(fitnesses_b):
         return best_expr_b
+    else:
+        return best_expr_usa
 
 # 生成示例数据 y = x^2 + 2x + 1
 data = [(x, x**2 + 2*x + 1) for x in np.linspace(-10, 10, data_num)]
