@@ -110,43 +110,37 @@ def select(population,fitnesses): # population为许多个树，fitnesses为每�
         current += fitness
         if current > pick: # 当叠加的损失超过了随机值后返回（随机选择深度） 越大越容易超过阈值
             return deepcopy(population[i]) # 深层copy
-def parse_expression(exp):
-    x = symbols('x')
-    if isinstance(exp, list):
-        if len(exp) == 0:  # 防止空列表的错误
-            return None
-        op = exp[0]
-        if op in ('+', '-', '*', '/'):
-            left = parse_expression(exp[1])  # 递归处理左子树
-            right = parse_expression(exp[2])  # 递归处理右子树
-            if left is None or right is None:  # 检查是否解析失败
-                return None
-            if op == '+':
-                return left + right
-            elif op == '-':
-                return left - right
-            elif op == '*':
-                return left * right
-            elif op == '/':
-                return left / (right + 1e-10)  # 防止除以零
-        elif op == 'cos':
-            return cos(parse_expression(exp[1]))
-        elif op == 'sin':
-            return sin(parse_expression(exp[1]))
-    else:
-        if isinstance(exp, str) and exp == 'x':  # 处理变量 x
-            return x
-        return exp  # 处理常数
-
-# 化简表达式并返回最简形式
 def to_simplified_string(prefix_expr):
     """将前缀表达式化简为最简多项式形式。"""
-    sympy_expr = parse_expression(prefix_expr)  # 解析表达式
-    if sympy_expr is None:
-        return "Invalid expression"
-    
-    simplified_expr = simplify(sympy_expr)  # 化简
-    return sp.expand(simplified_expr)  # 返回最简形式
+    def parse_expression(exp):
+        x = symbols('x')
+        if isinstance(exp, list):
+            op = exp[0]
+            if op in ('+', '-', '*', '/'):
+                left = parse_expression(exp[1])
+                right = parse_expression(exp[2])
+                if op == '+':
+                    return left + right
+                elif op == '-':
+                    return left - right
+                elif op == '*':
+                    return left * right
+                elif op == '/':
+                    return left / right
+            elif op == 'cos':
+                return cos(parse_expression(exp[1]))
+            elif op == 'sin':
+                return sin(parse_expression(exp[1]))
+            elif op == 'exp':
+                return math.exp(parse_expression(exp[1]))
+        else:
+            if isinstance(exp, str) and exp == 'x':
+                return x
+            return exp # 直接返回
+    sympy_expr = parse_expression(prefix_expr)
+    simplified_expr = simplify(sympy_expr)
+    return sp.expand(simplified_expr)
+
 
 #定义虹吸函数
 def siphon(list1, list2, func):
