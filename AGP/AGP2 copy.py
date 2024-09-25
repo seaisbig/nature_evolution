@@ -15,10 +15,10 @@ from matplotlib import font_manager
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用黑体显示中文
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 #===============超参数=================#
-cross_rate = 0.7 # 交叉率
-mutate_rate = 0.3 # 变异率
-data_num = 200 # 真实数据的数量
-num_generations = 500 # 迭代代数
+cross_rate = 0.5 # 交叉率
+mutate_rate = 0.1 # 变异率
+data_num = 100 # 真实数据的数量
+num_generations = 300 # 迭代代数
 population_size = 100 # 单个种群数量
 max_depth = 3 # 最大深度
 #=====================================#
@@ -72,6 +72,24 @@ def fitness_function(expr,data): # 适应度函数expr为一个树，data为一�
         total_error += (pred-y)**2
     return total_error/len(data) # 平均损失
 
+def cross_fitness_function(expr1, expr2, data):
+    total_error = 0
+    def f(x,y):
+        if x > y:
+            return (x-y)**2
+        else:
+            return 0
+        
+    for x,y in data:
+        try:
+            pred1 = evaluate_expression(expr1,x)
+            pred2 = evaluate_expression(expr2,x)
+            pred1 = np.clip(pred1,-1e10,1e10)
+            pred2 = np.clip(pred2,-1e10,1e10)
+        except (OverflowError,ZeroDivisionError):
+            return float('inf') # 无穷大
+        total_error += f(pred1,pred2)
+    return total_error/len(data)
 def crossover(expr1, expr2): 
     # 随机交换叶子节点
     if random.random() < cross_rate:
@@ -142,6 +160,8 @@ def to_simplified_string(prefix_expr):
 # population_size:随机生成的种群数量 data:
 def symbolic_regression(num_generations, population_size, data):
     # 初始化两个敌对种群
+    a = []
+    b = []
     best = []
     best_a = []
     best_b = []
@@ -155,12 +175,14 @@ def symbolic_regression(num_generations, population_size, data):
     mutate_rate_b = mutate_rate
     for generation in range(num_generations):
         # 种群全部评价适应度
-        fitnesses_a = [fitness_function(ind,data) for ind in population_a]
-        fitnesses_b = [fitness_function(ind,data) for ind in population_b]
+        fitnesses_a = [fitness_function(ind1,data)for ind1,ind2 in zip(population_a,population_b)]
+        fitnesses_b = [fitness_function(ind2,data)for ind1,ind2 in zip(population_a,population_b)]
         # 给出最佳适应度 
         best_fitness_a = min(fitnesses_a)
         best_fitness_b = min(fitnesses_b)
         best_fitness = min(best_fitness_b,best_fitness_a)
+        a.append(best_fitness_a)
+        b.append(best_fitness_b)
         if best_fitness < best_num:
             best_num = best_fitness
         best.append(best_num)
@@ -188,18 +210,14 @@ def symbolic_regression(num_generations, population_size, data):
         new_population_b = []
         # a种群
         while len(new_population_a) < population_size:
-            if f(sum(fitnesses_a),sum(fitnesses_b))=='b':
-                mutate_rate_a = 0.6
-            else:
-                mutate_rate_a = mutate_rate
             # 选择两个个体(可能自交)
             parent_a_1 = select(population_a,fitnesses_a)
             parent_a_2 = select(population_a,fitnesses_a)
             # 交叉
             child1,child2 = crossover(parent_a_1,parent_a_2)
             # 变异
-            child1 = mutation(child1,mutate_rate=mutate_rate_a)
-            child2 = mutation(child2,mutate_rate=mutate_rate_a)
+            child1 = mutation(child1,mutate_rate=mutate_rate)
+            child2 = mutation(child2,mutate_rate=mutate_rate)
         
             new_population_a.append(child1)
             new_population_a.append(child2)
@@ -207,24 +225,20 @@ def symbolic_regression(num_generations, population_size, data):
         # b种群
         while len(new_population_b) < population_size:
             # 选择两个个体
-            if f(sum(fitnesses_a),sum(fitnesses_b)) == 'a':
-                mutate_rate_b = 0.6
-            else:
-                mutate_rate_b = mutate_rate
             parent_b_1 = select(population_b,fitnesses_b)
             parent_b_2 = select(population_b,fitnesses_b)
             # 交叉
             child1,child2 = crossover(parent_b_1,parent_b_2)
             # 变异
-            child1 = mutation(child1,mutate_rate=mutate_rate_b)
-            child2 = mutation(child2,mutate_rate=mutate_rate_b)
+            child1 = mutation(child1,mutate_rate=mutate_rate)
+            child2 = mutation(child2,mutate_rate=mutate_rate)
                 
             new_population_b.append(child1)
             new_population_b.append(child2)
         population_b = new_population_b[:]
     plt.title(f"最终适应度{best[-1]}")
-    plt.plot(best_a,label='a')
-    plt.plot(best_b,label='b')
+    plt.plot(a,label='a')
+    plt.plot(b,label='b')
     plt.show()
     if min(min(fitnesses_b),min(fitnesses_a)) == min(fitnesses_a):
         return best_expr_a
