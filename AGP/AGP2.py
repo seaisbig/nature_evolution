@@ -5,7 +5,7 @@ import math
 from copy import deepcopy
 import math
 import sympy as sp
-from sympy import symbols, cos, sin, sqrt, simplify
+from sympy import symbols, cos, sin, sqrt, simplify,exp
 import matplotlib
 matplotlib.use('TkAgg')  # 指定 TkAgg 作为后端
 import matplotlib.pyplot as plt
@@ -15,12 +15,13 @@ from matplotlib import font_manager
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用黑体显示中文
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 #===============超参数=================#
-cross_rate = 0.7 # 交叉率
-mutate_rate = 0.5 # 变异率
-data_num = 200 # 真实数据的数量
-num_generations = 500 # 迭代代数
+cross_rate = 0.95 # 交叉率
+mutate_rate = 0.2 # 变异率
+data_num = 80 # 真实数据的数量
+num_generations = 200 # 迭代代数
 population_size = 100 # 单个种群数量
 max_depth = 3 # 最大深度
+β=1000000 #β的值
 #=====================================#
 
 OPERATORS = {
@@ -34,7 +35,7 @@ OPERATORS = {
 }
 
 TERMINALS = ['x']  # 变量
-CONSTANTS = [random.uniform(-10, 10) for _ in range(5)] # 随机常量
+CONSTANTS = [random.uniform(-10, 10) for _ in range(10)] # 随机常量
 
 # 生成随机表达式树
 def generation_random_expression(max_depth=max_depth):
@@ -47,9 +48,6 @@ def generation_random_expression(max_depth=max_depth):
             return [operator_choice,generation_random_expression(max_depth-1)]
         else:
             return [operator_choice,generation_random_expression(max_depth-1),generation_random_expression(max_depth-1)]
-        
-def sex(tree,sex): # 定义性别
-    return (tree,sex)
 
 def evaluate_expression(expr,x_value): # 树，x的值
     if isinstance(expr,(int,float)): # 如果expr是int或者float类型【常数】
@@ -75,6 +73,30 @@ def fitness_function(expr,data): # 适应度函数expr为一个树，data为一�
         total_error += (pred-y)**2
     return total_error/len(data) # 平均损失
 
+def cross_fitness_function(expr1, expr2, data):
+    total_error1 = 0
+    total_error2 = 0
+    def f(a,b,c):
+        if (a-c)**2 < (b-c)**2:
+            return 0
+        else:
+            return (a-b)**2
+        
+    for x,y in data:
+        try:
+            pred1 = evaluate_expression(expr1,x)
+            pred2 = evaluate_expression(expr2,x)
+            pred1 = np.clip(pred1,-1e10,1e10)
+            pred2 = np.clip(pred2,-1e10,1e10)
+        except (OverflowError,ZeroDivisionError):
+            return float('inf') # 无穷大
+        total_error1 += f(pred1,pred2,y)
+        total_error2 += f(pred2,pred1,y)
+    if total_error1 > total_error2:
+        return total_error1/len(data)
+    else:
+        return 0
+    #return total_error1/len(data)
 def crossover(expr1, expr2): 
     # 随机交换叶子节点
     if random.random() < cross_rate:
@@ -95,7 +117,7 @@ def crossover(expr1, expr2):
         return deepcopy(expr2), deepcopy(expr1)
     # 如果不交叉，直接返回原始表达式
     return deepcopy(expr1), deepcopy(expr2)
-def mutation(expr,max_depth=max_depth): # 将当前节点进行变异，深度不超过max_depth
+def mutation(expr,max_depth=max_depth,mutate_rate=mutate_rate): # 将当前节点进行变异，深度不超过max_depth
     if random.random() < mutate_rate:
         return generation_random_expression(max_depth)
     return expr
@@ -132,7 +154,7 @@ def to_simplified_string(prefix_expr):
             elif op == 'sin':
                 return sin(parse_expression(exp[1]))
             elif op == 'exp':
-                return math.exp(parse_expression(exp[1]))
+                return exp(parse_expression(exp[1]))
         else:
             if isinstance(exp, str) and exp == 'x':
                 return x
@@ -141,67 +163,111 @@ def to_simplified_string(prefix_expr):
     simplified_expr = simplify(sympy_expr)
     return sp.expand(simplified_expr)
 
+
 # population_size:随机生成的种群数量 data:
 def symbolic_regression(num_generations, population_size, data):
-    # 初始化男女种群
+    # 初始化两个敌对种群
+    a = []
+    b = []
     best = []
+    best_a = []
+    best_b = []
     best_num = 1000
-    population_male = [generation_random_expression() for _ in range(population_size)]
-    population_female = [generation_random_expression() for _ in range(population_size)]
-    for generation in range(num_generations):
+    best_num_a = 1000
+    best_num_b = 1000
+    population_a = [generation_random_expression() for _ in range(population_size)]
+    population_b = [generation_random_expression() for _ in range(population_size)]
+    #初始化两种群的变异率
+    mutate_rate_a = mutate_rate
+    mutate_rate_b = mutate_rate
+    best_fitness_a_ = 1000
+    best_fitness_b_ = 1000
+    generation = 1
+    # for generation in range(num_generations):
+    while best_fitness_a_ > 1 or best_fitness_b_>1:
+        generation +=1   
         # 种群全部评价适应度
-        fitnesses_male = [fitness_function(ind,data) for ind in population_male]
-        fitnesses_female = [fitness_function(ind,data) for ind in population_female]
+        fitnesses_a = [fitness_function(ind1,data) + β*cross_fitness_function(ind1,ind2,data) for ind1,ind2 in zip(population_a,population_b)]
+        fitnesses_b = [fitness_function(ind2,data) + β*cross_fitness_function(ind2,ind1,data) for ind1,ind2 in zip(population_a,population_b)]
+        fitnesses_a_ = [fitness_function(ind1,data)for ind1,ind2 in zip(population_a,population_b)]
+        fitnesses_b_ = [fitness_function(ind2,data)for ind1,ind2 in zip(population_a,population_b)]
+        # print([[fitnesses_a_[i]-fitnesses_a[i]] for i in range(population_size)])
         # 给出最佳适应度 
-        best_fitness_male = min(fitnesses_male)
-        best_fitness_female = min(fitnesses_female)
-        best_fitness = min(best_fitness_female,best_fitness_male)
+        best_fitness_a = min(fitnesses_a)
+        best_fitness_b = min(fitnesses_b)
+        best_fitness_a_ = min(fitnesses_a_)
+        best_fitness_b_ = min(fitnesses_b_)
+        best_fitness = min(best_fitness_b_,best_fitness_a_)
+        a.append(best_fitness_a_)
+        b.append(best_fitness_b_)
         if best_fitness < best_num:
             best_num = best_fitness
         best.append(best_num)
+        # if best_fitness_a < best_num_a:
+        #     best_num_a = best_fitness_a
+        # best_a.append(best_num_a)
+        # if best_fitness_b < best_num_b:
+        #     best_num_b = best_fitness_b
+        # best_b.append(best_num_b)
         # 最佳的树
-        best_expr_male = population_male[fitnesses_male.index(best_fitness_male)]
-        best_expr_female = population_female[fitnesses_female.index(best_fitness_female)]
+        best_expr_a = population_a[fitnesses_a_.index(best_fitness_a_)]
+        best_expr_b = population_b[fitnesses_b_.index(best_fitness_b_)]
+        #定义一个函数，判断哪一个胜出
+        def f(a,b):
+            return 'a' if a < b else 'b'
         # 输出循环次数和当前最大适应度
-        print(f'Generation:{generation} \nBest fitness_male = {best_fitness_male} Best fitness_female = {best_fitness_female}') 
+        print('-'*10)
+        print(f'Generation:{generation} \n\
+            最优a对应的损失（有竞争） = {best_fitness_a}\n\
+            最优a对应的损失（无竞争） = {fitnesses_a_[fitnesses_a.index(best_fitness_a)]}') 
+        print(f'\
+            最优b对应的损失（有竞争） = {best_fitness_b}\n\
+            最优b对应的损失（无竞争） = {fitnesses_b_[fitnesses_b.index(best_fitness_b)]}')
+        print(f'\
+            与最优a竞争的b的损失（有竞争） = {fitnesses_b[fitnesses_a.index(best_fitness_a)]}\n\
+            与最优a竞争的b的损失（无竞争） = {fitnesses_b_[fitnesses_a.index(best_fitness_a)]}\n\
+            与最优b竞争的a的损失（有竞争） = {fitnesses_a[fitnesses_b.index(best_fitness_b)]}\n\
+            与最优b竞争的a的损失（无竞争） = {fitnesses_a_[fitnesses_b.index(best_fitness_b)]}')
+        print('-'*10)
         # 选择新的种群
-        new_population_male = []
-        new_population_female = []
-        # 男性
-        while len(new_population_male) < population_size:
-            # 选择两个个体
-            parent_male = select(population_male,fitnesses_male)
-            parent_female = select(population_female,fitnesses_female)
+        new_population_a = []
+        new_population_b = []
+        # a种群
+        while len(new_population_a) < population_size:
+            # 选择两个个体(可能自交)
+            parent_a_1 = select(population_a,fitnesses_a)
+            parent_a_2 = select(population_a,fitnesses_a)
             # 交叉
-            child1,child2 = crossover(parent_male,parent_female)
+            child1,child2 = crossover(parent_a_1,parent_a_2)
             # 变异
-            child1 = mutation(child1)
-            child2 = mutation(child2)
-                
-            new_population_male.append(child1)
-            new_population_male.append(child2)
-        population_male = new_population_male[:]
-        # 女性
-        while len(new_population_female) < population_size:
-            # 选择两个个体
-            parent_male = select(population_male,fitnesses_male)
-            parent_female = select(population_female,fitnesses_female)
+            child1 = mutation(child1,mutate_rate=mutate_rate)
+            child2 = mutation(child2,mutate_rate=mutate_rate)
+        
+            new_population_a.append(child1)
+            new_population_a.append(child2)
+        population_a = new_population_a[:]
+        # b种群
+        while len(new_population_b) < population_size:
+            # 选择两个个体jh
+            parent_b_1 = select(population_b,fitnesses_b)
+            parent_b_2 = select(population_b,fitnesses_b)
             # 交叉
-            child1,child2 = crossover(parent_male,parent_female)
+            child1,child2 = crossover(parent_b_1,parent_b_2)
             # 变异
-            child1 = mutation(child1)
-            child2 = mutation(child2)
+            child1 = mutation(child1,mutate_rate=mutate_rate)
+            child2 = mutation(child2,mutate_rate=mutate_rate)
                 
-            new_population_female.append(child1)
-            new_population_female.append(child2)
-        population_female = new_population_female[:]
-    plt.title(f"设定性别种群的进化速度\n最终适应度{best[-1]}")
-    plt.plot(best)
+            new_population_b.append(child1)
+            new_population_b.append(child2)
+        population_b = new_population_b[:]
+    plt.title(f"最终适应度{best[-1]}")
+    plt.plot(a,label='a')
+    plt.plot(b,label='b')
     plt.show()
-    if min(min(fitnesses_female),min(fitnesses_male)) == min(fitnesses_male):
-        return best_expr_male
+    if min(min(fitnesses_b_),min(fitnesses_a_)) == min(fitnesses_a_):
+        return best_expr_a
     else:
-        return best_expr_female
+        return best_expr_b
 
 # 生成示例数据 y = x^2 + 2x + 1
 data = [(x, x**2 + 2*x + 1) for x in np.linspace(-10, 10, data_num)]
